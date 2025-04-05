@@ -19,5 +19,3 @@ weii = "weii.cli:cli"
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
-[project.scripts]
-weii = "weii:cli"

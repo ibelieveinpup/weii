@@ -24,8 +24,34 @@ from typing import Optional
 import evdev
 from evdev import ecodes
 
+# I, Steven, am adding the following
+# ADD TO EXISTING IMPORTS
+import numpy as np
+import sys
+import tty
+import termios
+
+# ====== NEW CONSTANTS for weiibal ======
+KG_TO_LBS = 2.20462
+SENSOR_ORDER = ["TL", "TR", "BL", "BR"]  # For clarity
 
 TERSE = False
+
+def wait_for_space():
+    """Wait for SPACE key press without root privileges"""
+    print("Press SPACE to begin measurement...", end='', flush=True)
+
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setcbreak(fd)
+        while True:
+            ch = sys.stdin.read(1)
+            if ch == ' ':
+                break
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    print()  # Newline after input
 
 
 def debug(message: str, force: bool = False) -> None:
@@ -48,79 +74,98 @@ def get_board_device() -> Optional[evdev.InputDevice]:
     )
     return board
 
-
-def get_raw_measurement(device: evdev.InputDevice) -> float:
-    """Read one measurement from the board."""
+def get_raw_measurement(device: evdev.InputDevice) -> tuple:
+    """Return raw sensor values (TL, TR, BL, BR) in kg"""
     data = [None] * 4
     while True:
         event = device.read_one()
         if event is None:
             continue
 
-        # Measurements are in decigrams, so we convert them to kilograms here.
-        if event.code == ecodes.ABS_HAT1X:
-            # Top left.
+        if event.code == ecodes.ABS_HAT1X:  # TL
             data[0] = event.value / 100
-        elif event.code == ecodes.ABS_HAT0X:
-            # Top right.
+        elif event.code == ecodes.ABS_HAT0X:  # TR
             data[1] = event.value / 100
-        elif event.code == ecodes.ABS_HAT0Y:
-            # Bottom left.
+        elif event.code == ecodes.ABS_HAT0Y:  # BL
             data[2] = event.value / 100
-        elif event.code == ecodes.ABS_HAT1Y:
-            # Bottom right.
+        elif event.code == ecodes.ABS_HAT1Y:  # BR
             data[3] = event.value / 100
+        elif event.code == ecodes.SYN_REPORT and event.value == 0:
+            if None not in data:
+                return tuple(data)
+            data = [None] * 4
+        # Keep existing error handling
         elif event.code == ecodes.BTN_A:
             sys.exit("ERROR: User pressed board button while measuring, aborting.")
         elif event.code == ecodes.SYN_DROPPED:
             pass
-        elif event.code == ecodes.SYN_REPORT and event.value == 3:
-            pass
-        elif event.code == ecodes.SYN_REPORT and event.value == 0:
-            if None in data:
-                # This measurement failed to read one of the sensors, try again.
-                data = [None] * 4
-                continue
-            else:
-                return sum(data)  # type: ignore
-        else:
-            debug(f"ERROR: Got unexpected event: {evdev.categorize(event)}")
 
+def read_data(device: evdev.InputDevice, samples: int, threshold: float) -> list:
+    """Collect raw sensor data with keyboard trigger"""
+    print("\n\aPress SPACE when ready to measure...")
+    wait_for_space()  # <-- Changed from keyboard.wait() 
 
-def read_data(device: evdev.InputDevice, samples: int, threshold: float) -> List[float]:
-    """
-    Read weight data from the board.
-
-    samples - The number of samples we ideally want to collect, if the user doesn't
-              cancel.
-    threshold - The weight (in kilos) to cross before starting to consider measurements
-                valid.
-    """
-    data: List[float] = []
-    while True:
+    sensor_readings = []
+    while len(sensor_readings) < samples:
         measurement = get_raw_measurement(device)
-        if len(data) and measurement < threshold:
-            # The user stepped off the board.
-            debug("User stepped off.")
-            break
-        if len(data) == 0 and measurement < threshold:
-            # This measurement is too light and measurement hasn't yet started, ignore.
+        if measurement is None:
             continue
-        data.append(measurement)
-        if len(data) == 1:
-            debug("\aMeasurement started, please wait...")
-        if len(data) > samples:
-            # We have enough samples now.
+            
+        current_weight = sum(measurement)
+        if len(sensor_readings) > 0 and current_weight < threshold:
             break
+            
+        sensor_readings.append(measurement)
+        
     device.close()
-    return data
+    return sensor_readings
 
+# ====== NEW ANALYSIS FUNCTIONS ======
+def calculate_metrics(sensor_readings: list) -> dict:
+    """Calculate weight distribution metrics"""
+    tl, tr, bl, br = np.array(sensor_readings).T
+    totals = tl + tr + bl + br
+
+    return {
+        'weight_kg': np.median(totals),
+        'left_right_diff': np.median((tl + bl) - (tr + br)),
+        'front_back_diff': np.median((tl + tr) - (bl + br)),
+        'left_percent': np.mean((tl + bl) / totals) * 100,
+        'front_percent': np.mean((tl + tr) / totals) * 100
+    }
+
+def format_output(metrics: dict, use_lbs: bool = False) -> str:
+    """Format output with optional unit conversion"""
+    conversions = {}
+    if use_lbs:
+        conversions = {
+            'weight': metrics['weight_kg'] * KG_TO_LBS,
+            'lr_diff': abs(metrics['left_right_diff']) * KG_TO_LBS,
+            'fb_diff': abs(metrics['front_back_diff']) * KG_TO_LBS,
+            'unit': 'lbs'
+        }
+    else:
+        conversions = {
+            'weight': metrics['weight_kg'],
+            'lr_diff': abs(metrics['left_right_diff']),
+            'fb_diff': abs(metrics['front_back_diff']),
+            'unit': 'kg'
+        }
+
+    output = f"""
+    Total weight: {conversions['weight']:.1f} {conversions['unit']}
+    Left/Right Difference: {conversions['lr_diff']:.1f} {conversions['unit']} ({metrics['left_percent']:.1f}%)
+    Front/Back Difference: {conversions['fb_diff']:.1f} {conversions['unit']} ({metrics['front_percent']:.1f}%)
+    """
+    return output
 
 def measure_weight(
     adjust: float,
     disconnect_address: str,
     command: Optional[str],
     terse: bool,
+    units: str = "kg",  # NEW PARAMETER
+    samples: int = 200,  # NEW PARAMETER
     fake: bool = False,
 ) -> float:
     """Perform one weight measurement."""
@@ -140,15 +185,19 @@ def measure_weight(
     if fake:
         weight_data = [85.2] * 200
     else:
-        weight_data = read_data(board, 200, threshold=20)
+        weight_data = read_data(board, samples, threshold=20)
 
-    final_weight = statistics.median(weight_data)
-    final_weight += adjust
+    sensor_readings = weight_data  # Only if using original summed weights
+    # OR for raw sensor data:
+    # sensor_readings = read_data(board, args.samples, threshold=20)
+
+    metrics = calculate_metrics(sensor_readings)
+    metrics['weight_kg'] += adjust
 
     if terse:
-        debug(f"{final_weight:.1f}", force=True)
+        debug(f"{metrics['weight_kg']:.1f}", force=True)
     else:
-        debug(f"\aDone, weight: {final_weight:.1f}.")
+        print(format_output(metrics, use_lbs=(units == 'lbs')))
 
     if disconnect_address:
         debug("Disconnecting...")
@@ -158,14 +207,14 @@ def measure_weight(
         )
 
     if command:
-        subprocess.run(command.replace("{weight}", f"{final_weight:.1f}"), shell=True)
+        subprocess.run(command.replace("{weight}", f"{metrics['weight_kg']:.1f}"), shell=True)
 
-    return final_weight
+    return metrics['weight_kg']
 
 
 def cli():
     parser = argparse.ArgumentParser(
-        description="Measure weight using a Wii Balance Board."
+        description="Advanced Wii Balance Board Analyzer"
     )
     parser.add_argument(
         "-a",
@@ -198,6 +247,18 @@ def cli():
         action="store_true",
         help="only print the final weight",
     )
+    parser.add_argument(
+        '--units',
+        choices=['kg', 'lbs'],
+        default='kg',
+        help='Measurement units (default: kg)'
+    )
+    parser.add_argument(
+        '--samples',
+        type=int,
+        default=200,
+        help='Number of samples to collect (default: 200)'
+    )
 
     args = parser.parse_args()
 
@@ -210,6 +271,8 @@ def cli():
         args.disconnect_when_done,
         command=args.command,
         terse=args.weight_only,
+        units=args.units,  # ADD THIS
+        samples=args.samples,  # ADD THIS
     )
 
 
