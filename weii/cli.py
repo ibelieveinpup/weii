@@ -122,40 +122,59 @@ def read_data(device: evdev.InputDevice, samples: int, threshold: float) -> list
 
 # ====== NEW ANALYSIS FUNCTIONS ======
 def calculate_metrics(sensor_readings: list) -> dict:
-    """Calculate weight distribution metrics"""
+    """Calculate weight distribution metrics with difference percentages"""
     tl, tr, bl, br = np.array(sensor_readings).T
     totals = tl + tr + bl + br
+    total_weight = np.median(totals)  # Median total weight
+
+    # Left/Right calculation
+    left = tl + bl
+    right = tr + br
+    lr_diff = np.median(left - right)
+    lr_side = "Left" if lr_diff > 0 else "Right"
+    lr_diff_abs = abs(lr_diff)
+    lr_diff_percent = (lr_diff_abs / total_weight) * 100  # New percentage calculation
+
+    # Front/Back calculation
+    front = tl + tr
+    back = bl + br
+    fb_diff = np.median(front - back)
+    fb_side = "Front" if fb_diff > 0 else "Back"
+    fb_diff_abs = abs(fb_diff)
+    fb_diff_percent = (fb_diff_abs / total_weight) * 100  # New percentage calculation
 
     return {
-        'weight_kg': np.median(totals),
-        'left_right_diff': np.median((tl + bl) - (tr + br)),
-        'front_back_diff': np.median((tl + tr) - (bl + br)),
-        'left_percent': np.mean((tl + bl) / totals) * 100,
-        'front_percent': np.mean((tl + tr) / totals) * 100
+        'weight_kg': total_weight,
+        'left_right_diff': lr_diff_abs,
+        'front_back_diff': fb_diff_abs,
+        'lr_diff_percent': lr_diff_percent,
+        'fb_diff_percent': fb_diff_percent,
+        'lr_side': lr_side,
+        'fb_side': fb_side
     }
 
 def format_output(metrics: dict, use_lbs: bool = False) -> str:
-    """Format output with optional unit conversion"""
+    """Format output with difference percentages"""
     conversions = {}
     if use_lbs:
         conversions = {
             'weight': metrics['weight_kg'] * KG_TO_LBS,
-            'lr_diff': abs(metrics['left_right_diff']) * KG_TO_LBS,
-            'fb_diff': abs(metrics['front_back_diff']) * KG_TO_LBS,
+            'lr_diff': metrics['left_right_diff'] * KG_TO_LBS,
+            'fb_diff': metrics['front_back_diff'] * KG_TO_LBS,
             'unit': 'lbs'
         }
     else:
         conversions = {
             'weight': metrics['weight_kg'],
-            'lr_diff': abs(metrics['left_right_diff']),
-            'fb_diff': abs(metrics['front_back_diff']),
+            'lr_diff': metrics['left_right_diff'],
+            'fb_diff': metrics['front_back_diff'],
             'unit': 'kg'
         }
 
     output = f"""
     Total weight: {conversions['weight']:.1f} {conversions['unit']}
-    Left/Right Difference: {conversions['lr_diff']:.1f} {conversions['unit']} ({metrics['left_percent']:.1f}%)
-    Front/Back Difference: {conversions['fb_diff']:.1f} {conversions['unit']} ({metrics['front_percent']:.1f}%)
+    {metrics['lr_side']} Side: {conversions['lr_diff']:.1f} {conversions['unit']} heavier ({metrics['lr_diff_percent']:.1f}% of total weight)
+    {metrics['fb_side']}: {conversions['fb_diff']:.1f} {conversions['unit']} heavier ({metrics['fb_diff_percent']:.1f}% of total weight)
     """
     return output
 
