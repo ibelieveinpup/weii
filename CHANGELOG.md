@@ -12,6 +12,11 @@ Fix
 
 Other
 ~~~~~
+- Feat: Various updates. [Stavros Korokithakis]
+- Ci: Migrate to ruff. [Stavros Korokithakis]
+- Ci: Add pre-commit action. [Stavros Korokithakis]
+- Doc: Change the project to GitHub. [Stavros Korokithakis]
+- Feat: Add more license texts. [Stavros Korokithakis]
 - Feat: Add weii man page. [Stavros Korokithakis]
 - Feat: Add cli script in the pyproject config. [Stavros Korokithakis]
 - Feat: Rename to `weii` [Stavros Korokithakis]

@@ -179,10 +179,14 @@ def format_output(metrics: dict, use_lbs: bool = False) -> str:
     return output
 
 def measure_weight(
+    #Non-default parameters-FIRST
     adjust: float,
     disconnect_address: str,
     command: Optional[str],
     terse: bool,
+
+    #Default parameters-SECOND
+    minlimit: float = 20.0,
     units: str = "kg",  # NEW PARAMETER
     samples: int = 200,  # NEW PARAMETER
     fake: bool = False,
@@ -204,7 +208,7 @@ def measure_weight(
     if fake:
         weight_data = [85.2] * 200
     else:
-        weight_data = read_data(board, samples, threshold=20)
+        weight_data = read_data(board, samples, threshold=minlimit)
 
     sensor_readings = weight_data  # Only if using original summed weights
     # OR for raw sensor data:
@@ -242,6 +246,12 @@ def cli():
         " or to account for clothing)",
         type=float,
         default=0,
+    )
+    parser.add_argument(
+    "--minlimit",
+    type=float,
+    default=20.0,  # Your original value
+    help="Minimum weight threshold to start measurement (kg)"
     )
     parser.add_argument(
         "-c",
@@ -288,8 +298,9 @@ def cli():
     measure_weight(
         args.adjust,
         args.disconnect_when_done,
-        command=args.command,
-        terse=args.weight_only,
+        args.command,
+        args.weight_only,
+        minlimit=args.minlimit,
         units=args.units,  # ADD THIS
         samples=args.samples,  # ADD THIS
     )
