@@ -1,72 +1,87 @@
-Weii
-====
+# weii (weiibal fork)
+**Enhanced Wii Balance Board Analyzer with Postural Metrics**  
+*Fork of [skorokithakis/weii](https://github.com/skorokithakis/weii) with additional features*
 
-Weii (pronounced "weigh") is a small script that connects to a Wii Balance Board, reads a weight measurement, and disconnects.
-Weii is the new, redesigned spiritual successor to [gr8w8upd8m8](https://github.com/skorokithakis/gr8w8upd8m8).
+<img src="https://upload.wikimedia.org/wikipedia/commons/thumb/3/3e/Wii_Balance_Board.svg/1200px-Wii_Balance_Board.svg.png" width="200" alt="Wii Balance Board">
 
-The latest version is available at https://github.com/skorokithakis/weii.
+## Features ✨
+**Original Functionality:**
+- Weight measurement using Nintendo Wii Balance Board
+- Bluetooth connectivity management
+- Basic command-line interface
 
-Installation
-------------
+**Extended Features (weiibal branch):**
+- **Bilateral Weight Analysis** ⚖️  
+  - Left/Right weight differential with percentage of total
+  - Front/Back balance metrics with imbalance percentage
+- **Enhanced Measurement Control** 🎛️  
+  - `--samples`: Custom sample collection size (default: 200)
+  - `--minlimit`: Adjust minimum weight threshold (kg)
+- **Unit Conversion** 🔄  
+  - Real-time `--units kg/lbs` conversion
+- **Interactive Workflow** ⌨️  
+  - Spacebar-triggered measurement start
+- **Advanced Output** 📊  
+  ```bash
+  Total weight: 92.4 lbs
+  Left Side: 1.8 lbs heavier (51.2% of total weight)
+  Back: 4.3 lbs heavier (55.1% of total weight)
 
-To install using `pipx` (recommended) or `pip`, run:
+# Install from weiibal branch
+pip install git+https://github.com/ibelieveinpup/weii.git@weiibal
 
-```
-pipx install weii
-```
+# Verify installation
+weii --version
 
-or
+# Standard measurement with bilateral metrics
+weii --units lbs
 
-```
-pip install weii
-```
+# Custom sample size and sensitivity
+weii --samples 300 --minlimit 15
 
+# Full example with Bluetooth management
+weii --samples 400 --units kg -d "00:1A:7D:DA:71:13"
 
-Usage
------
+# Measurement starts when SPACE is pressed
+Press SPACE to begin measurement...
 
-Weii currently is only tested on Linux.
-Before you use Weii, you need to pair your balance board via Bluetooth.
-You can do that by pressing the red button in the battery compartment and then going through the normal Bluetooth pairing process.
-I don't remember the pairing code, try 0000 or 1234, and please let me know which one is right.
+# Clone your fork
+git clone https://github.com/ibelieveinpup/weii.git
+cd weii
 
-To weigh yourself, run `weii` and follow the instructions.
-You need to have paired your balance board beforehand, then press the button at the front of the board until the blue LED lights up solid, and step on.
-Once the measurement is done, you can step off.
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate
 
-Weii can optionally use `bluetoothctl` to disconnect (and turn off) the balance board when the weighing is done, you can do that by passing the device's address to the `-d` argument:
+# Install in editable mode
+pip install -e .
 
-```
-weii --disconnect-when-done 11:22:33:44:55:66
-```
+# Add original repository
+git remote add upstream https://github.com/skorokithakis/weii.git
 
-You can run a command after weighing, like so:
+# Fetch updates
+git fetch upstream
 
-```
-weii --command "echo {weight}"
-```
+# Merge safely
+git checkout weiibal
+git merge upstream/master
 
-`{weight}` will be replaced with the measured weight.
+## Merging Upstream Updates 🔄
+To sync with the original repository:
 
-You can also adjust the measurement to account for clothing, or to match some other scale:
+```bash
+# Add original repository as upstream
+git remote add upstream https://github.com/skorokithakis/weii.git
 
-```
-weii --adjust=-2.3
-```
+# Fetch latest changes
+git fetch upstream
 
-License
--------
+# Merge into your weiibal branch
+git checkout weiibal
+git merge upstream/master  # Original repo uses "master" branch
 
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as published
-by the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
+---
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/>.
->>>>>>> upstream/master
+**Maintainer**: Steven (@ibelieveinpup)  
+**Original Author**: Stavros Korokithakis ([@skorokithakis](https://github.com/skorokithakis))  
+**License**: AGPL-3.0-or-later (inherited from upstream)
