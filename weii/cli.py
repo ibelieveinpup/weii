@@ -86,9 +86,9 @@ def get_raw_measurement(device: evdev.InputDevice) -> tuple:
             data[0] = event.value / 100
         elif event.code == ecodes.ABS_HAT0X:  # TR
             data[1] = event.value / 100
-        elif event.code == ecodes.ABS_HAT0Y:  # BL
+        elif event.code == ecodes.ABS_HAT1Y:  # BL
             data[2] = event.value / 100
-        elif event.code == ecodes.ABS_HAT1Y:  # BR
+        elif event.code == ecodes.ABS_HAT0Y:  # BR
             data[3] = event.value / 100
         elif event.code == ecodes.SYN_REPORT and event.value == 0:
             if None not in data:
