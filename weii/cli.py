@@ -30,6 +30,9 @@ import numpy as np
 import sys
 import tty
 import termios
+from datetime import datetime
+import os
+import json
 
 # ====== NEW CONSTANTS for weiibal ======
 KG_TO_LBS = 2.20462
@@ -39,7 +42,7 @@ TERSE = False
 
 def wait_for_space():
     """Wait for SPACE key press without root privileges"""
-    print("Press SPACE to begin measurement...", end='', flush=True)
+    print("\n\aPress SPACE to begin measurement...", file=sys.stderr, end='', flush=True)
 
     fd = sys.stdin.fileno()
     old_settings = termios.tcgetattr(fd)
@@ -102,7 +105,7 @@ def get_raw_measurement(device: evdev.InputDevice) -> tuple:
 
 def read_data(device: evdev.InputDevice, samples: int, threshold: float) -> list:
     """Collect raw sensor data with keyboard trigger"""
-    print("\n\aPress SPACE when ready to measure...")
+    #print("\n\aPress SPACE when ready to measure...", file=sys.stderr)
     wait_for_space()  # <-- Changed from keyboard.wait() 
 
     sensor_readings = []
@@ -153,7 +156,7 @@ def calculate_metrics(sensor_readings: list) -> dict:
         'fb_side': fb_side
     }
 
-def format_output(metrics: dict, use_lbs: bool = False) -> str:
+def format_output(metrics: dict, use_lbs: bool = False) -> dict:
     """Format output with difference percentages"""
     conversions = {}
     if use_lbs:
@@ -171,68 +174,91 @@ def format_output(metrics: dict, use_lbs: bool = False) -> str:
             'unit': 'kg'
         }
 
-    output = f"""
-    Total weight: {conversions['weight']:.1f} {conversions['unit']}
-    {metrics['lr_side']} Side: {conversions['lr_diff']:.1f} {conversions['unit']} heavier ({metrics['lr_diff_percent']:.1f}% of total weight)
-    {metrics['fb_side']}: {conversions['fb_diff']:.1f} {conversions['unit']} heavier ({metrics['fb_diff_percent']:.1f}% of total weight)
-    """
-    return output
+    return {
+            "timestamp": datetime.now().isoformat(timespec='seconds'),
+            "units": conversions['unit'],
+            "total_weight": round(conversions['weight'], 2),
+            "planes": {
+                "coronal": {
+                    "increased_weight": metrics["lr_side"],
+                    "value": round(conversions["lr_diff"], 2),
+                    "percentage": round(metrics['lr_diff_percent'],1),
+                    },
+                "saggital": {
+                    "increased_weight": metrics['fb_side'],
+                    "value": round(conversions['fb_diff'], 2),
+                    "percentage": round(metrics['fb_diff_percent'],1)
+                    }
+                }
+            }
 
-def measure_weight(
-    #Non-default parameters-FIRST
-    adjust: float,
-    disconnect_address: str,
-    command: Optional[str],
-    terse: bool,
-
-    #Default parameters-SECOND
-    minlimit: float = 20.0,
-    units: str = "kg",  # NEW PARAMETER
-    samples: int = 200,  # NEW PARAMETER
-    fake: bool = False,
-) -> float:
+def measure_weight(args) -> float:
     """Perform one weight measurement."""
-    if disconnect_address and not re.match(
-        r"^([0-9a-f]{2}[:]){5}([0-9a-f]{2})$", disconnect_address, re.IGNORECASE
+
+    if args.disconnect_when_done and not re.match(
+        r"^([0-9a-f]{2}[:]){5}([0-9a-f]{2})$", args.disconnect_when_done, re.IGNORECASE
     ):
         sys.exit("ERROR: Invalid device address to disconnect specified.")
 
     debug("Waiting for balance board...")
-    while not fake:
+    while not args.fake:
         board = get_board_device()
         if board:
             break
         time.sleep(0.5)
+
     debug("\aBalance board found, please step on.")
 
-    if fake:
-        weight_data = [85.2] * 200
+    if args.fake:
+        weight_data = [85.2] * args.samples
     else:
-        weight_data = read_data(board, samples, threshold=minlimit)
+        weight_data = read_data(board, args.samples, threshold=args.minlimit)
 
-    sensor_readings = weight_data  # Only if using original summed weights
-    # OR for raw sensor data:
-    # sensor_readings = read_data(board, args.samples, threshold=20)
-
+    sensor_readings = weight_data
     metrics = calculate_metrics(sensor_readings)
-    metrics['weight_kg'] += adjust
+    metrics['weight_kg'] += args.adjust
 
-    if terse:
+    if args.weight_only:
         debug(f"{metrics['weight_kg']:.1f}", force=True)
-    else:
-        print(format_output(metrics, use_lbs=(units == 'lbs')))
+        return metrics['weight_kg']
 
-    if disconnect_address:
+    data = format_output(metrics, use_lbs=(args.units == "lbs"))
+
+    if args.json:
+        print(json.dumps(data, indent=4))
+        if args.save:
+            visit_path = os.environ.get("VISIT_PATH")
+            if not visit_path:
+                sys.exit("❌ VISIT_PATH not set. Cannot save.")
+
+            weiibal_dir = os.path.join(visit_path, "weiibal")
+            os.makedirs(weiibal_dir, exist_ok=True)
+
+            timestamp = data['timestamp'].replace(":", "-")
+            outfile = os.path.join(weiibal_dir, f"{timestamp}.json")
+            with open(outfile, "w") as f:
+                json.dump(data, f, indent=4)
+
+            if args.print:
+                print(json.dumps(data, indent=4))
+    else:
+        print("This will eventually be human readable output")
+
+    if args.disconnect_when_done:
         debug("Disconnecting...")
         subprocess.run(
-            ["/usr/bin/env", "bluetoothctl", "disconnect", disconnect_address],
+            ["/usr/bin/env", "bluetoothctl", "disconnect", args.disconnect_when_done],
             capture_output=True,
         )
 
-    if command:
-        subprocess.run(command.replace("{weight}", f"{metrics['weight_kg']:.1f}"), shell=True)
+    if args.command:
+        subprocess.run(
+            args.command.replace("{weight}", f"{metrics['weight_kg']:.1f}"),
+            shell=True,
+        )
 
-    return metrics['weight_kg']
+    return metrics["weight_kg"]
+
 
 
 def cli():
@@ -288,6 +314,24 @@ def cli():
         default=200,
         help='Number of samples to collect (default: 200)'
     )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output measurement as json to stdout"
+    )
+    parser.add_argument(
+        "--save",
+        action="store_true",
+        help="Save measurement to visit folder (Requires $VISIT_PATH to be set!)"
+    )
+    parser.add_argument(
+        "--print",
+        action="store_true",
+        help="Also print json when using --save"
+    )
+    parser.add_argument("--fake", action="store_true", help="Use simulated input data")
+
+
 
     args = parser.parse_args()
 
@@ -295,15 +339,7 @@ def cli():
         global TERSE
         TERSE = True
 
-    measure_weight(
-        args.adjust,
-        args.disconnect_when_done,
-        args.command,
-        args.weight_only,
-        minlimit=args.minlimit,
-        units=args.units,  # ADD THIS
-        samples=args.samples,  # ADD THIS
-    )
+    measure_weight(args)
 
 
 if __name__ == "__main__":
