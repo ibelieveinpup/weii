@@ -178,18 +178,20 @@ def format_output(metrics: dict, use_lbs: bool = False) -> dict:
             "timestamp": datetime.now().isoformat(timespec='seconds'),
             "units": conversions['unit'],
             "total_weight": round(conversions['weight'], 2),
-            "planes": {
-                "coronal": {
+            "planes": [
+                { 
+                    "name": "coronal",
                     "increased_weight": metrics["lr_side"],
                     "value": round(conversions["lr_diff"], 2),
                     "percentage": round(metrics['lr_diff_percent'],1),
-                    },
-                "saggital": {
+                },
+                {
+                    "name": "saggital",
                     "increased_weight": metrics['fb_side'],
                     "value": round(conversions['fb_diff'], 2),
                     "percentage": round(metrics['fb_diff_percent'],1)
-                    }
                 }
+              ]
             }
 
 def measure_weight(args) -> float:
