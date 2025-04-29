@@ -186,7 +186,7 @@ def format_output(metrics: dict, use_lbs: bool = False) -> dict:
                     "percentage": round(metrics['lr_diff_percent'],1),
                 },
                 {
-                    "name": "saggital",
+                    "name": "sagital",
                     "increased_weight": metrics['fb_side'],
                     "value": round(conversions['fb_diff'], 2),
                     "percentage": round(metrics['fb_diff_percent'],1)
