@@ -235,7 +235,7 @@ def measure_weight(args) -> float:
     data = format_output(metrics, use_lbs=(args.units == "lbs"))
 
     if args.json:
-        print(json.dumps(data, indent=4))
+        # print(json.dumps(data, indent=4))
         if args.save:
             visit_path = os.environ.get("VISIT_PATH")
             if not visit_path:
@@ -249,9 +249,12 @@ def measure_weight(args) -> float:
             with open(outfile, "w") as f:
                 json.dump(data, f, indent=4)
 
-            if args.print:
-                print(json.dumps(data, indent=4))
+        if args.print:
+            print(json.dumps(data, indent=4))
     else:
+        # TODO
+        # I should make a --human for human readable output to stderr and not be part of an "else"
+        # Or maybe no --human is needed, just leave it as an else in case --json is not chosen
         print("This will eventually be human readable output")
 
     if args.disconnect_when_done:
@@ -330,7 +333,7 @@ def cli():
         help="Save measurement to visit folder (Requires $VISIT_PATH to be set!)",
     )
     parser.add_argument(
-        "--print", action="store_true", help="Also print json when using --save"
+        "--print", action="store_true", help="Also print json when using --json"
     )
     parser.add_argument("--fake", action="store_true", help="Use simulated input data")
 
