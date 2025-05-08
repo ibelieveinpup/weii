@@ -40,9 +40,12 @@ SENSOR_ORDER = ["TL", "TR", "BL", "BR"]  # For clarity
 
 TERSE = False
 
+
 def wait_for_space():
     """Wait for SPACE key press without root privileges"""
-    print("\n\aPress SPACE to begin measurement...", file=sys.stderr, end='', flush=True)
+    print(
+        "\n\aPress SPACE to begin measurement...", file=sys.stderr, end="", flush=True
+    )
 
     fd = sys.stdin.fileno()
     old_settings = termios.tcgetattr(fd)
@@ -50,7 +53,7 @@ def wait_for_space():
         tty.setcbreak(fd)
         while True:
             ch = sys.stdin.read(1)
-            if ch == ' ':
+            if ch == " ":
                 break
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
@@ -76,6 +79,7 @@ def get_board_device() -> Optional[evdev.InputDevice]:
         devices[0],
     )
     return board
+
 
 def get_raw_measurement(device: evdev.InputDevice) -> tuple:
     """Return raw sensor values (TL, TR, BL, BR) in kg"""
@@ -103,25 +107,27 @@ def get_raw_measurement(device: evdev.InputDevice) -> tuple:
         elif event.code == ecodes.SYN_DROPPED:
             pass
 
+
 def read_data(device: evdev.InputDevice, samples: int, threshold: float) -> list:
     """Collect raw sensor data with keyboard trigger"""
-    #print("\n\aPress SPACE when ready to measure...", file=sys.stderr)
-    wait_for_space()  # <-- Changed from keyboard.wait() 
+    # print("\n\aPress SPACE when ready to measure...", file=sys.stderr)
+    wait_for_space()  # <-- Changed from keyboard.wait()
 
     sensor_readings = []
     while len(sensor_readings) < samples:
         measurement = get_raw_measurement(device)
         if measurement is None:
             continue
-            
+
         current_weight = sum(measurement)
         if len(sensor_readings) > 0 and current_weight < threshold:
             break
-            
+
         sensor_readings.append(measurement)
-        
+
     device.close()
     return sensor_readings
+
 
 # ====== NEW ANALYSIS FUNCTIONS ======
 def calculate_metrics(sensor_readings: list) -> dict:
@@ -147,52 +153,54 @@ def calculate_metrics(sensor_readings: list) -> dict:
     fb_diff_percent = (fb_diff_abs / total_weight) * 100  # New percentage calculation
 
     return {
-        'weight_kg': total_weight,
-        'left_right_diff': lr_diff_abs,
-        'front_back_diff': fb_diff_abs,
-        'lr_diff_percent': lr_diff_percent,
-        'fb_diff_percent': fb_diff_percent,
-        'lr_side': lr_side,
-        'fb_side': fb_side
+        "weight_kg": total_weight,
+        "left_right_diff": lr_diff_abs,
+        "front_back_diff": fb_diff_abs,
+        "lr_diff_percent": lr_diff_percent,
+        "fb_diff_percent": fb_diff_percent,
+        "lr_side": lr_side,
+        "fb_side": fb_side,
     }
+
 
 def format_output(metrics: dict, use_lbs: bool = False) -> dict:
     """Format output with difference percentages"""
     conversions = {}
     if use_lbs:
         conversions = {
-            'weight': metrics['weight_kg'] * KG_TO_LBS,
-            'lr_diff': metrics['left_right_diff'] * KG_TO_LBS,
-            'fb_diff': metrics['front_back_diff'] * KG_TO_LBS,
-            'unit': 'lbs'
+            "weight": metrics["weight_kg"] * KG_TO_LBS,
+            "lr_diff": metrics["left_right_diff"] * KG_TO_LBS,
+            "fb_diff": metrics["front_back_diff"] * KG_TO_LBS,
+            "unit": "lbs",
         }
     else:
         conversions = {
-            'weight': metrics['weight_kg'],
-            'lr_diff': metrics['left_right_diff'],
-            'fb_diff': metrics['front_back_diff'],
-            'unit': 'kg'
+            "weight": metrics["weight_kg"],
+            "lr_diff": metrics["left_right_diff"],
+            "fb_diff": metrics["front_back_diff"],
+            "unit": "kg",
         }
 
     return {
-            "timestamp": datetime.now().isoformat(timespec='seconds'),
-            "units": conversions['unit'],
-            "total_weight": round(conversions['weight'], 2),
-            "planes": [
-                { 
-                    "name": "coronal",
-                    "increased_weight": metrics["lr_side"],
-                    "value": round(conversions["lr_diff"], 2),
-                    "percentage": round(metrics['lr_diff_percent'],1),
-                },
-                {
-                    "name": "sagittal",
-                    "increased_weight": metrics['fb_side'],
-                    "value": round(conversions['fb_diff'], 2),
-                    "percentage": round(metrics['fb_diff_percent'],1)
-                }
-              ]
-            }
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "units": conversions["unit"],
+        "total_weight": round(conversions["weight"], 2),
+        "planes": [
+            {
+                "name": "coronal",
+                "increased_weight": metrics["lr_side"],
+                "value": round(conversions["lr_diff"], 2),
+                "percentage": round(metrics["lr_diff_percent"], 1),
+            },
+            {
+                "name": "sagittal",
+                "increased_weight": metrics["fb_side"],
+                "value": round(conversions["fb_diff"], 2),
+                "percentage": round(metrics["fb_diff_percent"], 1),
+            },
+        ],
+    }
+
 
 def measure_weight(args) -> float:
     """Perform one weight measurement."""
@@ -218,11 +226,11 @@ def measure_weight(args) -> float:
 
     sensor_readings = weight_data
     metrics = calculate_metrics(sensor_readings)
-    metrics['weight_kg'] += args.adjust
+    metrics["weight_kg"] += args.adjust
 
     if args.weight_only:
         debug(f"{metrics['weight_kg']:.1f}", force=True)
-        return metrics['weight_kg']
+        return metrics["weight_kg"]
 
     data = format_output(metrics, use_lbs=(args.units == "lbs"))
 
@@ -233,10 +241,10 @@ def measure_weight(args) -> float:
             if not visit_path:
                 sys.exit("❌ VISIT_PATH not set. Cannot save.")
 
-            weiibal_dir = os.path.join(visit_path, "weiibal")
+            weiibal_dir = os.path.join(visit_path, "General_Findings", "weiibal")
             os.makedirs(weiibal_dir, exist_ok=True)
 
-            timestamp = data['timestamp'].replace(":", "-")
+            timestamp = data["timestamp"].replace(":", "-")
             outfile = os.path.join(weiibal_dir, f"{timestamp}.json")
             with open(outfile, "w") as f:
                 json.dump(data, f, indent=4)
@@ -262,11 +270,8 @@ def measure_weight(args) -> float:
     return metrics["weight_kg"]
 
 
-
 def cli():
-    parser = argparse.ArgumentParser(
-        description="Advanced Wii Balance Board Analyzer"
-    )
+    parser = argparse.ArgumentParser(description="Advanced Wii Balance Board Analyzer")
     parser.add_argument(
         "-a",
         "--adjust",
@@ -276,10 +281,10 @@ def cli():
         default=0,
     )
     parser.add_argument(
-    "--minlimit",
-    type=float,
-    default=20.0,  # Your original value
-    help="Minimum weight threshold to start measurement (kg)"
+        "--minlimit",
+        type=float,
+        default=20.0,  # Your original value
+        help="Minimum weight threshold to start measurement (kg)",
     )
     parser.add_argument(
         "-c",
@@ -305,35 +310,29 @@ def cli():
         help="only print the final weight",
     )
     parser.add_argument(
-        '--units',
-        choices=['kg', 'lbs'],
-        default='kg',
-        help='Measurement units (default: kg)'
+        "--units",
+        choices=["kg", "lbs"],
+        default="kg",
+        help="Measurement units (default: kg)",
     )
     parser.add_argument(
-        '--samples',
+        "--samples",
         type=int,
         default=200,
-        help='Number of samples to collect (default: 200)'
+        help="Number of samples to collect (default: 200)",
     )
     parser.add_argument(
-        "--json",
-        action="store_true",
-        help="Output measurement as json to stdout"
+        "--json", action="store_true", help="Output measurement as json to stdout"
     )
     parser.add_argument(
         "--save",
         action="store_true",
-        help="Save measurement to visit folder (Requires $VISIT_PATH to be set!)"
+        help="Save measurement to visit folder (Requires $VISIT_PATH to be set!)",
     )
     parser.add_argument(
-        "--print",
-        action="store_true",
-        help="Also print json when using --save"
+        "--print", action="store_true", help="Also print json when using --save"
     )
     parser.add_argument("--fake", action="store_true", help="Use simulated input data")
-
-
 
     args = parser.parse_args()
 
